@@ -1,22 +1,19 @@
 # -*- coding: utf-8 -*-
 
 import os
-from collections import OrderedDict
 from functools import cached_property
-from records.setup import read
+
 import tablib
-from sqlalchemy import create_engine, exc, inspect, text
+from sqlalchemy import create_engine, inspect, text
 
 
 class Row:
     """A row from a table of a database."""
 
-    def __init__(self, keys, schemas, values, table):
+    def __init__(self, keys, values):
         self._keys = keys
-        self._schemas = schemas
         self._values = values
-        self._table = table
-        assert len(self._keys) == len(self._schemas) == len(self._values)
+        assert len(self._keys) == len(self._values)
 
     def __repr__(self) -> str:
         return '<Row {}>'.format(self.__str__())
@@ -98,28 +95,54 @@ class RowSet:
     """A set of rows from a table of a database."""
 
     def __init__(self, rows: list):
-        self._rows = rows
-        pass
+        self._pre_rows = rows
+        self._all_rows = []
+        self.pending = True
 
     def __repr__(self):
-        return '<RowSet size={}>'.format(len(self))
+        return '<RowSet fetched={} pending={}>'.format(len(self), self.pending)
 
     def __len__(self):
         return len(self._all_rows)
 
-    def __getitem__(self, key):
-        if isinstance(key, int):
-            return self._all_rows[key]
-        else:
-            return RowSet(self._rows[key])
-
     def __iter__(self):
-        for r in self._rows:
-            yield r
+        """Iterate over all rows, consuming the underlying generator only when necessary."""
+        i = 0
+        while True:
+            if i < len(self):
+                # Check the cached _all_rows first.
+                yield self[i]
+            else:
+                # Enter the generator _pre_rows and throw StopIteration when done.
+                try:
+                    yield next(self)
+                except StopIteration:
+                    return
+            i += 1
 
-    @property
-    def size(self) -> int:
-        return len(self._all_rows)
+    def __next__(self):
+        try:
+            nextrow = next(self._pre_rows)
+            self._all_rows.append(nextrow)
+            return nextrow
+        except StopIteration:
+            self.pending = False
+            raise StopIteration('RowSet contains no more rows.')
+
+    def __getitem__(self, key):
+        is_int = isinstance(key, int)
+
+        # Convert int into slice.
+        sli = slice(key, key + 1) if is_int else key
+
+        while sli.stop is None or len(self) < sli.stop:
+            # Turn enough generator _pre_rows into cached _all_rows.
+            try:
+                next(self)
+            except StopIteration:
+                break
+
+        return self._all_rows[key] if is_int else RowSet(iter(self._all_rows[key]))
 
     @property
     def dataset(self) -> tablib.Dataset:
@@ -127,20 +150,24 @@ class RowSet:
         # Create a new Tablib Dataset.
         data = tablib.Dataset()
 
-        # If the RowSet is empty, just return the empty set
-        if len(self._rows) == 0:
+        try:
+            # Set the column names as headers on Tablib Dataset.
+            data.headers = self[0].keys()
+        except IndexError:
+            # If the RowSet is empty, just return the empty set.
             return data
 
-        # Set the column names as headers on Tablib Dataset.
-        data.headers = self[0].keys()
-
         # Set rows.
-        for row in self.all():
+        for row in self:
             data.append(_reduce_datetimes(row.values()))
 
         return data
 
-    def first(self, default=Exception):
+    def all(self):
+        list(self)
+        return self
+
+    def first(self, default=Exception) -> Row:
         """Returns the first Row of the RowSet, or `default`. If
         `default` is a subclass of Exception, then raise IndexError
         instead of returning it."""
@@ -151,7 +178,7 @@ class RowSet:
                 raise e
             return default
 
-    def one(self):
+    def one(self) -> Row:
         """Returns the first Row of the RowSet, ensuring that it is the only row."""
         if len(self) > 1:
             raise ValueError('Contains more than one row.')
@@ -162,11 +189,19 @@ class RowSet:
         """Returns the first column of the first row, or `default`."""
         return self.first()[0]
 
+    def export(self, format, **kwargs):
+        """Exports all the rows in the RowSet to the given format."""
+        return self.dataset.export(format, **kwargs)
+
 
 class Table:
     def __init__(self, name, database):
         self._name = name
         self._database = database
+        self._cache = []
+
+    def __repr__(self):
+        return '<Table {}>'.format(self.name)
 
     @property
     def name(self) -> str:
@@ -175,6 +210,12 @@ class Table:
     @property
     def database(self):
         return self._database
+
+    def query(self, query, **params):
+        return self.database.query(query, **params)
+
+    def clear(self):
+        pass
 
     def insert(self):
         pass
@@ -225,8 +266,12 @@ class Database:
         self._conn.close()
         self._engine.dispose()
 
-    def query(self):
-        pass
+    def query(self, query, **params):
+        """Executes the given SQL query against the connected Database.
+        Parameters can, optionally, be provided. Returns a RowSet."""
+        cursor = self._conn.execute(text(query), **params)
+
+        return RowSet(Row(cursor.keys(), r) for r in cursor)
 
     def bulk_query(self):
         pass
