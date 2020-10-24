@@ -16,7 +16,7 @@ class Row:
         assert len(self._keys) == len(self._values)
 
     def __repr__(self) -> str:
-        return '<Row {}>'.format(self.__str__())
+        return '<Row {}>'.format(str(self))
 
     def __str__(self) -> str:
         return self.export('json')[1:-1]
@@ -29,7 +29,7 @@ class Row:
         if isinstance(key, int):
             return self.values()[key]
 
-        # Support for string-based lookup.
+        # Support for key-based lookup.
         if key in self.keys():
             i = self.keys().index(key)
             if self.keys().count(key) > 1:
@@ -38,11 +38,12 @@ class Row:
 
         raise KeyError("No '{}' field.".format(key))
 
-    def __getattr__(self, key):
-        try:
-            return self[key]
-        except KeyError as e:
-            raise AttributeError(e)
+    # TODO: fix the conflict between __getattr__ and @property
+    # def __getattr__(self, key):
+    #     try:
+    #         return self[key]
+    #     except KeyError as e:
+    #         raise AttributeError(e)
 
     def __iter__(self):
         for z in zip(self._keys, self._values):
@@ -58,10 +59,6 @@ class Row:
     def keys(self):
         """Returns the list of column names of the table."""
         return self._keys
-
-    def schemas(self):
-        """Returns the list of schemas describing the keys."""
-        return self._schemas
 
     def values(self):
         """Returns the list of values from the query."""
@@ -94,7 +91,7 @@ class Row:
 class RowSet:
     """A set of rows from a table of a database."""
 
-    def __init__(self, rows: list):
+    def __init__(self, rows):
         self._pre_rows = rows
         self._all_rows = []
         self.pending = True
@@ -284,6 +281,6 @@ class Database:
         return Table(name, self)
 
 
-def _reduce_datetimes(row: Row):
+def _reduce_datetimes(values: list) -> list:
     """Receives a row, converts datetimes to strings."""
-    return tuple(r.isoformat() if hasattr(r, 'isoformat') else r for r in row.values())
+    return [r.isoformat() if hasattr(r, 'isoformat') else r for r in values]
