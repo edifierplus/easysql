@@ -1,9 +1,10 @@
-from easysql import Row
+from easysql import Row, _reduce_datetimes
 from pytest import raises
 from datetime import datetime
 from collections import OrderedDict
 import json
 import tablib
+
 
 class TestRow:
     def create_standard_row(self):
@@ -118,7 +119,13 @@ class TestRow:
         assert row.get("absence") is None
 
     def test_set(self):
-        pass
+        row = self.create_standard_row()
+        for k in row.keys():
+            row.set(k, k + "newvalue")
+            assert row[k] == k + "newvalue"
+
+        with raises(ValueError):
+            row.set("absence", "newvalue")
 
     def test_save(self):
         pass
@@ -135,3 +142,119 @@ class TestRow:
         outcome = row.export('json')
 
         assert outcome == expectation
+
+
+class TestRowSet:
+    def test___init__(self):
+        pass
+
+    def test___repr__(self):
+        pass
+
+    def test___len__(self):
+        pass
+
+    def test___iter__(self):
+        pass
+
+    def test___next__(self):
+        pass
+
+    def test___getitem__(self):
+        pass
+
+    def test_dataset(self):
+        pass
+
+    def test_all(self):
+        pass
+
+    def test_first(self):
+        pass
+
+    def test_one(self):
+        pass
+
+    def test_scalar(self):
+        pass
+
+    def test_export(self):
+        pass
+
+
+class TestTable:
+    def test___init__(self):
+        pass
+
+    def test___repr__(self):
+        pass
+
+    def test_name(self):
+        pass
+
+    def test_database(self):
+        pass
+
+    def test_query(self):
+        pass
+
+    def test_clear(self):
+        pass
+
+    def test_insert(self):
+        pass
+
+    def test_delete(self):
+        pass
+
+    def test_update(self):
+        pass
+
+    def test_select(self):
+        pass
+
+    def test_join(self):
+        pass
+
+    def test_where(self):
+        pass
+
+    def test_order_by(self):
+        pass
+
+    def test_execute(self):
+        pass
+
+    def test_(self):
+        pass
+
+
+class TestDatabase:
+    def test___init__(self):
+        pass
+
+    def test_table_names(self):
+        pass
+
+    def test_close(self):
+        pass
+
+    def test_query(self):
+        pass
+
+    def test_bulk_query(self):
+        pass
+
+    def test_get_table(self):
+        pass
+
+
+def test__reduce_datetimes():
+    t = datetime.now()
+    origin = [t, 1, 'abc', True, None]
+    expectation = origin.copy()
+    expectation[0] = t.isoformat()
+
+    outcome = _reduce_datetimes(origin)
+
+    assert outcome == expectation

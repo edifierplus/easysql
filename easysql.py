@@ -73,7 +73,8 @@ class Row:
 
     def set(self, key, value):
         """Sets the value of the key, without saving to database."""
-        pass
+        i = self._keys.index(key)
+        self._values[i] = value
 
     def save(self) -> bool:
         """Saves changes to database based on the primary key."""
