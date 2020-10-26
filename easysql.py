@@ -248,6 +248,7 @@ class Database:
 
         self._engine = create_engine(self.db_url, pool_pre_ping=True, **kwargs)
         self._conn = self._engine.connect()
+        # TODO: reflect metadata from database: https://docs.sqlalchemy.org/en/13/core/reflection.html
         self.open = True
 
     def __repr__(self):
