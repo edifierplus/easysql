@@ -4,15 +4,18 @@ import os
 from functools import cached_property
 
 import tablib
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import MetaData, create_engine, text
+from sqlalchemy import Table as SaTable
 
 
 class Row:
     """A row from a table of a database."""
 
-    def __init__(self, keys, values):
+    def __init__(self, keys: list, values: list, table=None, database=None):
         self._keys = keys
         self._values = values
+        self._table = table
+        self._database = database
         assert len(self._keys) == len(self._values)
 
     def __repr__(self) -> str:
@@ -53,16 +56,26 @@ class Row:
     def dataset(self) -> tablib.Dataset:
         """A Tablib Dataset representation of the Row."""
         data = tablib.Dataset(headers=self.keys())
-        data.append(_reduce_datetimes(self.values()))
+        data.append(self.values(reduce_datetimes=True))
         return data
+
+    @property
+    def table(self):
+        """Returns the related table of the row. If not a single table related, returns None."""
+        return self._table
+
+    @property
+    def database(self):
+        """Returns the related database of the row."""
+        return self._database
 
     def keys(self):
         """Returns the list of column names of the table."""
         return self._keys
 
-    def values(self):
+    def values(self, reduce_datetimes=False):
         """Returns the list of values from the query."""
-        return self._values
+        return self._reduce_datetimes(self._values) if reduce_datetimes else self._values
 
     def get(self, key, default=None):
         """Returns the value for a given key, or default."""
@@ -87,6 +100,11 @@ class Row:
     def export(self, format, **kwargs):
         """Exports the row to the given format."""
         return self.dataset.export(format, **kwargs)
+
+    @staticmethod
+    def _reduce_datetimes(input: list) -> list:
+        """Receives a list and converts datetimes to strings in it."""
+        return [r.isoformat() if hasattr(r, 'isoformat') else r for r in input]
 
 
 class RowSet:
@@ -157,7 +175,7 @@ class RowSet:
 
         # Set rows.
         for row in self:
-            data.append(_reduce_datetimes(row.values()))
+            data.append(row.values(reduce_datetimes=True))
 
         return data
 
@@ -193,8 +211,8 @@ class RowSet:
 
 
 class Table:
-    def __init__(self, name, database):
-        self._name = name
+    def __init__(self, table: SaTable, database):
+        self._table = table
         self._database = database
         self._cache = []
 
@@ -203,7 +221,7 @@ class Table:
 
     @property
     def name(self) -> str:
-        return self._name
+        return self._table.name
 
     @property
     def database(self):
@@ -248,7 +266,7 @@ class Database:
 
         self._engine = create_engine(self.db_url, pool_pre_ping=True, **kwargs)
         self._conn = self._engine.connect()
-        # TODO: reflect metadata from database: https://docs.sqlalchemy.org/en/13/core/reflection.html
+        self._meta = MetaData(bind=self._engine, reflect=True)
         self.open = True
 
     def __repr__(self):
@@ -257,7 +275,7 @@ class Database:
     @cached_property
     def table_names(self) -> list:
         """Returns a list of table names for the connected database."""
-        return inspect(self._engine).get_table_names()
+        return self._engine.table_names()
 
     def close(self):
         """Closes the Database."""
@@ -280,9 +298,4 @@ class Database:
         if name not in self.table_names:
             raise KeyError("Unknown table name '{}'".format(name))
 
-        return Table(name, self)
-
-
-def _reduce_datetimes(values: list) -> list:
-    """Receives a row, converts datetimes to strings."""
-    return [r.isoformat() if hasattr(r, 'isoformat') else r for r in values]
+        return Table(self._meta.tables[name], self)
