@@ -1,4 +1,4 @@
-from easysql import Row, _reduce_datetimes
+from easysql import Row
 from pytest import raises
 from datetime import datetime
 from collections import OrderedDict
@@ -10,7 +10,7 @@ class TestRow:
     def create_standard_row(self):
         keys = ['id', 'name', 'email', 'birthday']
         values = [250, 'Fool', 'fake@unreal.abcd', datetime.fromtimestamp(0)]
-        return Row(keys, values)
+        return Row(keys, values, "DummyTable", "DummyDatabase")
 
     def test___init___equal_length(self):
         keys = ['a', 'b', 'c']
@@ -27,6 +27,9 @@ class TestRow:
 
         with raises(AssertionError):
             Row(keys, values)
+
+    def test___init___with_table(self):
+        pass
 
     def test___repr__(self):
         row = self.create_standard_row()
@@ -89,6 +92,16 @@ class TestRow:
 
         assert isinstance(row.dataset, tablib.Dataset)
 
+    def test_table(self):
+        row = self.create_standard_row()
+
+        assert row.table is row._table
+
+    def test_database(self):
+        row = self.create_standard_row()
+
+        assert row.database is row._database
+
     def test_keys(self):
         row = self.create_standard_row()
 
@@ -98,6 +111,14 @@ class TestRow:
         row = self.create_standard_row()
 
         assert row.values() is row._values
+
+    def test_values_reduce_datetimes(self):
+        row = self.create_standard_row()
+
+        unconverted = row.values()
+        converted = row.values(reduce_datetimes=True)
+
+        assert unconverted[-1].isoformat() == converted[-1]
 
     def test_get(self):
         row = self.create_standard_row()
@@ -140,6 +161,16 @@ class TestRow:
         row = Row(keys, values)
 
         outcome = row.export('json')
+
+        assert outcome == expectation
+
+    def test__reduce_datetimes(self):
+        t = datetime.now()
+        origin = [t, 1, 'abc', True, None]
+        expectation = origin.copy()
+        expectation[0] = t.isoformat()
+
+        outcome = Row._reduce_datetimes(origin)
 
         assert outcome == expectation
 
@@ -247,14 +278,3 @@ class TestDatabase:
 
     def test_get_table(self):
         pass
-
-
-def test__reduce_datetimes():
-    t = datetime.now()
-    origin = [t, 1, 'abc', True, None]
-    expectation = origin.copy()
-    expectation[0] = t.isoformat()
-
-    outcome = _reduce_datetimes(origin)
-
-    assert outcome == expectation
