@@ -1,17 +1,25 @@
-from easysql import Row
-from pytest import raises
-from datetime import datetime
-from collections import OrderedDict
 import json
+from collections import OrderedDict
+from datetime import datetime
+
 import tablib
+from easysql import Database, Row, RowSet, Table
+from pytest import fixture, raises
+
+
+@fixture
+def standard_row():
+    keys = ['id', 'name', 'email', 'birthday']
+    values = [250, 'Fool', 'fake@unreal.abcd', datetime.fromtimestamp(0)]
+    return Row(keys, values, "DummyTable", "DummyDatabase")
+
+
+@fixture
+def standard_database():
+    return Database(db_url="sqlite:///tests/db.sqlite3")
 
 
 class TestRow:
-    def create_standard_row(self):
-        keys = ['id', 'name', 'email', 'birthday']
-        values = [250, 'Fool', 'fake@unreal.abcd', datetime.fromtimestamp(0)]
-        return Row(keys, values, "DummyTable", "DummyDatabase")
-
     def test___init___equal_length(self):
         keys = ['a', 'b', 'c']
         values = ['A', 'B', 'C']
@@ -28,14 +36,14 @@ class TestRow:
         with raises(AssertionError):
             Row(keys, values)
 
-    def test___init___with_table(self):
-        pass
+    def test___init___with_table_and_database(self, standard_row):
+        assert standard_row._table == "DummyTable"
+        assert standard_row._database == "DummyDatabase"
 
-    def test___repr__(self):
-        row = self.create_standard_row()
-        expectation = '<Row {}>'.format(str(row))
+    def test___repr__(self, standard_row):
+        expectation = '<Row {}>'.format(str(standard_row))
 
-        outcome = row.__repr__()
+        outcome = standard_row.__repr__()
 
         assert outcome == expectation
 
@@ -49,22 +57,16 @@ class TestRow:
 
         assert outcome == expectation
 
-    def test___len__(self):
-        row = self.create_standard_row()
+    def test___len__(self, standard_row):
+        assert len(standard_row) == len(standard_row._keys)
 
-        assert len(row) == len(row._keys)
+    def test___getitem___index_based(self, standard_row):
+        for i in range(len(standard_row)):
+            assert standard_row[i] == standard_row.values()[i]
 
-    def test___getitem___index_based(self):
-        row = self.create_standard_row()
-
-        for i in range(len(row)):
-            assert row[i] == row.values()[i]
-
-    def test___getitem___key_based(self):
-        row = self.create_standard_row()
-
-        for key, value in zip(row._keys, row._values):
-            assert row[key] == value
+    def test___getitem___key_based(self, standard_row):
+        for key, value in zip(standard_row._keys, standard_row._values):
+            assert standard_row[key] == value
 
     def test___getitem___multiple_fields(self):
         row = Row(['a', 'b', 'b'], [1, 2, 3])
@@ -72,81 +74,56 @@ class TestRow:
         with raises(KeyError, match="Multiple 'b' fields."):
             row['b']
 
-    def test___getitem___no_field(self):
-        row = self.create_standard_row()
-
+    def test___getitem___no_field(self, standard_row):
         with raises(KeyError, match="No 'c' field."):
-            row['c']
+            standard_row['c']
 
     def test___getattr__(self):
         pass
 
-    def test___iter__(self):
-        row = self.create_standard_row()
+    def test___iter__(self, standard_row):
+        for k, v in standard_row:
+            assert standard_row[k] == v
 
-        for k, v in row:
-            assert row[k] == v
+    def test_dataset(self, standard_row):
+        assert isinstance(standard_row.dataset, tablib.Dataset)
 
-    def test_dataset(self):
-        row = self.create_standard_row()
+    def test_table(self, standard_row):
+        assert standard_row.table is standard_row._table
 
-        assert isinstance(row.dataset, tablib.Dataset)
+    def test_database(self, standard_row):
+        assert standard_row.database is standard_row._database
 
-    def test_table(self):
-        row = self.create_standard_row()
+    def test_keys(self, standard_row):
+        assert standard_row.keys() is standard_row._keys
 
-        assert row.table is row._table
+    def test_values(self, standard_row):
+        assert standard_row.values() is standard_row._values
 
-    def test_database(self):
-        row = self.create_standard_row()
-
-        assert row.database is row._database
-
-    def test_keys(self):
-        row = self.create_standard_row()
-
-        assert row.keys() is row._keys
-
-    def test_values(self):
-        row = self.create_standard_row()
-
-        assert row.values() is row._values
-
-    def test_values_reduce_datetimes(self):
-        row = self.create_standard_row()
-
-        unconverted = row.values()
-        converted = row.values(reduce_datetimes=True)
+    def test_values_reduce_datetimes(self, standard_row):
+        unconverted = standard_row.values()
+        converted = standard_row.values(reduce_datetimes=True)
 
         assert unconverted[-1].isoformat() == converted[-1]
 
-    def test_get(self):
-        row = self.create_standard_row()
+    def test_get(self, standard_row):
+        for i in range(len(standard_row)):
+            assert standard_row.get(i) == standard_row.values()[i]
 
-        for i in range(len(row)):
-            assert row.get(i) == row.values()[i]
+        for key, value in zip(standard_row._keys, standard_row._values):
+            assert standard_row.get(key) == value
 
-        for key, value in zip(row._keys, row._values):
-            assert row.get(key) == value
+    def test_get_failed(self, standard_row):
+        assert standard_row.get("absence", "default") == "default"
+        assert standard_row.get("absence") is None
 
-    def test_get_fail_with_default(self):
-        row = self.create_standard_row()
-
-        assert row.get("absence", "default") == "default"
-
-    def test_get_fail_without_default(self):
-        row = self.create_standard_row()
-
-        assert row.get("absence") is None
-
-    def test_set(self):
-        row = self.create_standard_row()
-        for k in row.keys():
-            row.set(k, k + "newvalue")
-            assert row[k] == k + "newvalue"
+    def test_set(self, standard_row):
+        for k in standard_row.keys():
+            standard_row.set(k, k + "newvalue")
+            assert standard_row[k] == k + "newvalue"
 
         with raises(ValueError):
-            row.set("absence", "newvalue")
+            standard_row.set("absence", "newvalue")
 
     def test_save(self):
         pass
@@ -262,19 +239,37 @@ class TestTable:
 
 class TestDatabase:
     def test___init__(self):
-        pass
+        database = Database("sqlite://")
 
-    def test_table_names(self):
-        pass
+        assert database.open is True
+
+    def test___repr__(self, standard_database):
+        assert standard_database.__repr__() == '<Database open=True>'
+
+    def test_table_names(self, standard_database):
+        assert standard_database.table_names[:3] == ['auth_group', 'auth_group_permissions', 'auth_permission']
 
     def test_close(self):
-        pass
+        database = Database("sqlite://")
+        database.close()
 
-    def test_query(self):
-        pass
+        assert database.open is False
+        assert database._conn.closed is True
+
+    def test_query(self, standard_database):
+        ans = standard_database.query("select * from display_signal")
+
+        assert isinstance(ans, RowSet)
 
     def test_bulk_query(self):
         pass
 
-    def test_get_table(self):
-        pass
+    def test_get_table(self, standard_database):
+        table = standard_database.get_table('display_signal')
+
+        assert isinstance(table, Table)
+        assert table.name == 'display_signal'
+
+    def test_get_table_failed(self, standard_database):
+        with raises(KeyError, match="Unknown table name 'unknown'"):
+            standard_database.get_table('unknown')

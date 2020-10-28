@@ -266,7 +266,8 @@ class Database:
 
         self._engine = create_engine(self.db_url, pool_pre_ping=True, **kwargs)
         self._conn = self._engine.connect()
-        self._meta = MetaData(bind=self._engine, reflect=True)
+        self._meta = MetaData()
+        self._meta.reflect(bind=self._engine)
         self.open = True
 
     def __repr__(self):
