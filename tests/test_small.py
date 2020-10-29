@@ -19,6 +19,12 @@ def standard_database():
     return Database(db_url="sqlite:///tests/db.sqlite3")
 
 
+@fixture
+def standard_rowset():
+    db = Database(db_url="sqlite:///tests/db.sqlite3")
+    return db.query(("SELECT * FROM display_signal"))
+
+
 class TestRow:
     def test___init___equal_length(self):
         keys = ['a', 'b', 'c']
@@ -154,37 +160,79 @@ class TestRow:
 
 class TestRowSet:
     def test___init__(self):
-        pass
+        rows = (i for i in range(10))
+        rowset = RowSet(rows)
 
-    def test___repr__(self):
-        pass
+        assert rowset._pre_rows == rows
+        assert rowset._all_rows == []
+        assert rowset.pending is True
 
-    def test___len__(self):
-        pass
+    def test___repr__(self, standard_rowset):
+        assert standard_rowset.__repr__() == '<RowSet fetched=0 pending=True>'
 
-    def test___iter__(self):
-        pass
+    def test___len__(self, standard_rowset):
+        assert len(standard_rowset) == 0
 
-    def test___next__(self):
-        pass
+        standard_rowset.first()
 
-    def test___getitem__(self):
-        pass
+        assert len(standard_rowset) == 1
 
-    def test_dataset(self):
-        pass
+    def test___iter__(self, standard_rowset):
+        row_list = list(standard_rowset)
 
-    def test_all(self):
-        pass
+        assert len(row_list) == len(standard_rowset)
+        assert standard_rowset.pending is False
 
-    def test_first(self):
-        pass
+    def test___next__(self, standard_rowset):
+        with raises(StopIteration):
+            row_list = []
+            while True:
+                row_list.append(next(standard_rowset))
+                assert len(row_list) == len(standard_rowset)
+
+    def test___getitem__(self, standard_rowset):
+        rowset = RowSet((i for i in range(10)))
+
+        index_result = rowset[5]
+        slice_result = rowset[2:7]
+
+        assert isinstance(index_result, int)
+        assert index_result == 5
+        assert isinstance(slice_result, RowSet)
+        assert list(slice_result) == list(range(2, 7))
+
+    def test_dataset(self, standard_rowset):
+        assert isinstance(standard_rowset.dataset, tablib.Dataset)
+
+    def test_all(self, standard_rowset):
+        standard_rowset.all()
+
+        assert standard_rowset.pending is False
+
+    def test_first(self, standard_rowset):
+        assert standard_rowset.first() is standard_rowset[0]
+
+    def test_first_failed(self):
+        empty_rowset = RowSet(iter(()))
+
+        with raises(IndexError):
+            empty_rowset.first()
 
     def test_one(self):
-        pass
+        rowset = RowSet((i for i in range(8, 9)))
+
+        assert rowset.one() == 8
+
+    def test_one_failed(self):
+        rowset = RowSet((i for i in range(10)))
+
+        with raises(ValueError, match='Contains more than one row.'):
+            rowset.one()
 
     def test_scalar(self):
-        pass
+        rowset = RowSet(([str(i)] for i in range(10)))
+
+        assert rowset.scalar() == '0'
 
     def test_export(self):
         pass
@@ -257,7 +305,7 @@ class TestDatabase:
         assert database._conn.closed is True
 
     def test_query(self, standard_database):
-        ans = standard_database.query("select * from display_signal")
+        ans = standard_database.query("SELECT * FROM display_signal")
 
         assert isinstance(ans, RowSet)
 

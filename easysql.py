@@ -183,20 +183,14 @@ class RowSet:
         list(self)
         return self
 
-    def first(self, default=Exception) -> Row:
-        """Returns the first Row of the RowSet, or `default`. If
-        `default` is a subclass of Exception, then raise IndexError
-        instead of returning it."""
-        try:
-            return self[0]
-        except IndexError as e:
-            if issubclass(default, Exception):
-                raise e
-            return default
+    def first(self) -> Row:
+        """Returns the first Row of the RowSet. If there is nothing in the RowSet,
+        then raise an IndexError."""
+        return self[0]
 
     def one(self) -> Row:
         """Returns the first Row of the RowSet, ensuring that it is the only row."""
-        if len(self) > 1:
+        if len(list(self)) > 1:
             raise ValueError('Contains more than one row.')
 
         return self.first()
@@ -289,7 +283,7 @@ class Database:
         Parameters can, optionally, be provided. Returns a RowSet."""
         cursor = self._conn.execute(text(query), **params)
 
-        return RowSet(Row(cursor.keys(), r) for r in cursor)
+        return RowSet(Row(cursor.keys(), r, None, self) for r in cursor)
 
     def bulk_query(self):
         pass
