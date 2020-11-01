@@ -209,14 +209,15 @@ class RowSet:
 class Executor:
     def __init__(self, table, clause):
         self._table = table
+        self._name = str(clause).split()[0]
         self._pre = clause
 
     def where(self, clause):
-        self._pre.where(clause)
+        self._pre = self._pre.where(clause)
         return self
 
     def execute(self):
-        return self._table.database.execute()
+        return self._table.database.execute(self._pre)
 
 
 class Table:
