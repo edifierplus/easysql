@@ -4,8 +4,10 @@ import os
 from functools import cached_property
 
 import tablib
-from sqlalchemy import MetaData, create_engine, text
+from sqlalchemy import MetaData
 from sqlalchemy import Table as SaTable
+from sqlalchemy import create_engine, text
+from sqlalchemy.sql import select
 
 
 class Row:
@@ -204,14 +206,35 @@ class RowSet:
         return self.dataset.export(format, **kwargs)
 
 
+class Executor:
+    def __init__(self, table, clause):
+        self._table = table
+        self._pre = clause
+
+    def where(self, clause):
+        self._pre.where(clause)
+        return self
+
+    def execute(self):
+        return self._table.database.execute()
+
+
 class Table:
     def __init__(self, table: SaTable, database):
         self._table = table
         self._database = database
-        self._cache = []
 
     def __repr__(self):
         return '<Table {}>'.format(self.name)
+
+    def __len__(self):
+        return len(self._table.columns)
+
+    def __getitem__(self, key):
+        if key in self._table.columns.keys():
+            return self._table.columns[key]
+
+        raise KeyError("No '{}' column.".format(key))
 
     @property
     def name(self) -> str:
@@ -221,34 +244,47 @@ class Table:
     def database(self):
         return self._database
 
+    @property
+    def columns(self):
+        return self._table.columns
+
+    @property
+    def c(self):
+        return self.columns
+
     def query(self, query, **params):
         return self.database.query(query, **params)
 
-    def clear(self):
-        pass
+    def insert(self, *args, **kwargs):
+        """Insert rows into the table.
+        Examples:
+            insert(id=1, name='Tom', email='tom@example.com')
+            insert({'id': 1, 'name': 'Tom', 'email'='tom@example.com'})
+            insert([
+                {'id': 1, 'name': 'Tom', 'email'='tom@example.com'},
+                {'id': 2, 'name': 'Kat', 'email'='kat@example.com'},
+            ])
+        """
+        command = self._table.insert()
+        if len(kwargs) > 0:
+            return self._database.execute(command.values(**kwargs))
+        else:
+            return self._database.execute(command, args[0])
 
-    def insert(self):
-        pass
+    def delete(self, **kwargs) -> Executor:
+        return Executor(table=self, clause=self._table.delete().values(**kwargs))
 
-    def delete(self):
-        pass
+    def update(self, **kwargs):
+        return Executor(table=self, clause=self._table.update().values(**kwargs))
 
-    def update(self):
-        pass
+    def select(self, *args):
+        if len(args) == 0:
+            return Executor(table=self, clause=select([self._table]))
 
-    def select(self):
-        pass
+        array = [a.gg if isinstance(a, str) else a for a in args]
+        return Executor(table=self, clause=select(array))
 
     def join(self):
-        pass
-
-    def where(self):
-        pass
-
-    def order_by(self):
-        pass
-
-    def execute(self):
         pass
 
 
@@ -277,6 +313,10 @@ class Database:
         self.open = False
         self._conn.close()
         self._engine.dispose()
+
+    def execute(self, statement):
+        """Executes the statement using the database connection."""
+        return self._conn.execute(statement)
 
     def query(self, query, **params):
         """Executes the given SQL query against the connected Database.

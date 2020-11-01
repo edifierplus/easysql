@@ -281,9 +281,6 @@ class TestTable:
     def test_execute(self):
         pass
 
-    def test_(self):
-        pass
-
 
 class TestDatabase:
     def test___init__(self):
