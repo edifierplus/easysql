@@ -245,10 +245,22 @@ class TestTable:
     def test___repr__(self):
         pass
 
+    def test___len__(self):
+        pass
+
+    def test___getitem__(self):
+        pass
+
     def test_name(self):
         pass
 
     def test_database(self):
+        pass
+
+    def test_columns(self):
+        pass
+
+    def test_c(self):
         pass
 
     def test_query(self):
@@ -270,15 +282,6 @@ class TestTable:
         pass
 
     def test_join(self):
-        pass
-
-    def test_where(self):
-        pass
-
-    def test_order_by(self):
-        pass
-
-    def test_execute(self):
         pass
 
 
